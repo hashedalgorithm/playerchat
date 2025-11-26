@@ -43,7 +43,7 @@
           <artifactId>exec-maven-plugin</artifactId>
           <version>3.6.2</version>
           <configuration>
-            <mainClass>com.hashedalgorithm.playerchat.App</mainClass>
+            <mainClass>com.hashedalgorithm.playerchat.server.App</mainClass>
           </configuration>
         </plugin>
         <plugin>
