@@ -8,14 +8,14 @@ import java.net.*;
 public class Server {
     private ServerSocket serverSocket;
 
-    private ClientInstance initiator;
-    private ClientInstance receiver;
+    public ClientInstance initiator;
+    public ClientInstance receiver;
 
     public Server(int port) throws IOException {
         try {
             this.serverSocket = new ServerSocket(port);
         } catch (BindException be) {
-            System.out.printf("[+] - Port &d is already in use.\n", port);
+            System.out.printf("[+] - Port %d is already in use.\n", port);
             System.exit(1);
         } catch (IOException e) {
             e.printStackTrace();
@@ -36,13 +36,13 @@ public class Server {
                     Socket clientSocket = serverSocket.accept();
 
                     if(this.initiator == null && this.receiver == null) {
-                        this.initiator = new ClientInstance(clientSocket, Role.INITIATOR);
+                        this.initiator = new ClientInstance(this,clientSocket, Role.INITIATOR);
                         this.initiator.start();
                         continue;
                     }
 
                     if(this.receiver == null) {
-                        this.receiver = new ClientInstance(clientSocket, Role.RECEIVER);
+                        this.receiver = new ClientInstance(this, clientSocket, Role.RECEIVER);
                         this.receiver.start();
                     }
                 }

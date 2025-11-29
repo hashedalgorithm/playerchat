@@ -11,57 +11,61 @@ import java.net.SocketTimeoutException;
 
 public class ServerCommunicator {
 
-    private Socket clientSocket;
     private PrintWriter out;
     private BufferedReader in;
     public Role clientRole;
 
 
     public ServerCommunicator(String name, String ip, int port) throws IOException {
-        this.clientSocket = new Socket(ip, port);
-        this.clientSocket.setSoTimeout(1000 * 60);
-        System.out.println("[+] - Connected to server successfully!");
+        try{
+            Socket clientSocket = new Socket(ip, port);
+            clientSocket.setSoTimeout(1000 * 60);
 
-        this.out = new PrintWriter(clientSocket.getOutputStream(), true);
-        this.in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
+            this.out = new PrintWriter(clientSocket.getOutputStream(), true);
+            this.in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
 
-        // Sending first message client name - client identifier
-        out.println(name);
+            System.out.println("[+] - Connected to server successfully!");
+            // Sending first message client name - client identifier
+            out.println(name);
 
-        while (true) {
-            try {
-                String rawRole = in.readLine();
-                System.out.println("[+] - Got acknowledgment from server");
-                if (rawRole.equalsIgnoreCase(Role.INITIATOR.getValue())) {
-                    this.clientRole = Role.INITIATOR;
-                    break;
+            while (true) {
+                try {
+                    String rawRole = in.readLine();
+                    System.out.println("[+] - Got acknowledgment from server");
+                    if (rawRole.equalsIgnoreCase(Role.INITIATOR.getValue())) {
+                        this.clientRole = Role.INITIATOR;
+                        break;
+                    }
+                    else if (rawRole.equalsIgnoreCase(Role.RECEIVER.getValue())) {
+                        this.clientRole = Role.RECEIVER;
+                        break;
+                    }
+                    else throw new IOException("Invalid Role!");
+
                 }
-                else if (rawRole.equalsIgnoreCase(Role.RECEIVER.getValue())) {
-                    this.clientRole = Role.RECEIVER;
-                    break;
+                catch (SocketTimeoutException e) {
+                    System.out.println("[+] - Waiting for server ACK!");
                 }
-                else throw new IOException("Invalid Role!");
-
+                catch (IOException e) {
+                    System.out.println("[!] - Error in determining role!");
+                    e.printStackTrace();
+                    System.exit(-1);
+                }
             }
-            catch (SocketTimeoutException e) {
-                System.out.println("[+] - Waiting for server ACK!");
-            }
-            catch (IOException e) {
-                System.out.println("[!] - Error in determining role!");
-                e.printStackTrace();
-                System.exit(-1);
-            }
+        } catch (IOException e) {
+            System.err.println("[!] - Could not connect to the server");
+            e.printStackTrace();
+            System.exit(-1);
         }
 
-    }
 
+    }
 
     public void sendMessage(String message) {
         out.println(message);
     }
 
     public String waitForReply(){
-
         while (true) {
             try {
                 String inputLine = in.readLine();

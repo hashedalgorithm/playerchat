@@ -6,9 +6,8 @@ public class App {
 
     public static void main(String[] args) {
 
-        System.out.println("Player Chat - by SanjayKumar Kumaravelan");
-        System.out.println("----------------------------------------");
-        System.out.println();
+        System.out.println("Player Chat Server - by SanjayKumar Kumaravelan");
+        System.out.println("-----------------------------------------------");
         System.out.println();
 
         try {
