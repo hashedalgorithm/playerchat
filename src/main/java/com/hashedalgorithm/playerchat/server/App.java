@@ -1,11 +1,13 @@
 package com.hashedalgorithm.playerchat.server;
 
 import java.io.IOException;
+import java.util.logging.Logger;
 
 public class App {
 
-    public static void main(String[] args) {
+    private static final Logger logger = Logger.getLogger(App.class.getName());
 
+    public static void main(String[] args) {
         System.out.println("Player Chat Server - by SanjayKumar Kumaravelan");
         System.out.println("-----------------------------------------------");
         System.out.println();
@@ -14,7 +16,7 @@ public class App {
             Server server = new Server(12345);
             server.start();
         } catch (IOException e) {
-            e.printStackTrace();
+            logger.severe(e.getMessage());
         }
     }
 }
