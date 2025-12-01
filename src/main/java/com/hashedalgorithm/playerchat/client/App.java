@@ -6,42 +6,35 @@ public class App {
 
     public static void main(String[] args) {
 
-        int counter = 0;
-
         Scanner scanner = new Scanner(System.in);
 
-        System.out.println("Player Chat - by SanjayKumar Kumaravelan");
+        System.out.println("Player Chat Client - by SanjayKumar Kumaravelan");
         System.out.println("----------------------------------------");
         System.out.println();
 
         System.out.print("[+] - Enter your chat name: ");
-        String playerName = scanner.nextLine();
+        String name = scanner.nextLine();
 
 //      System.out.print("[+] - Enter ip: ");
 //      String ip = scanner.nextLine();
 //      System.out.print("[+] - Enter server port: ");
 //      int port = Integer.parseInt(scanner.nextLine().trim());
 
-        Client client = new Client(playerName, "127.0.0.1", 12345);
+        Client client = new Client(scanner, name, "127.0.0.1", 12345);
 
-        new Thread(() -> {
-            while (true) {
-                String resp = client.waitForReply();
-                System.out.print("\r\033[2K");
-                System.out.println(resp);
-                System.out.printf("[%s]: ", playerName);
+        client.listenForIncomingMessages();
+
+        try{
+            while(true){
+                System.out.printf("[%s]: ", name);
+                String message = scanner.nextLine();
+
+                client.sendMessage(message);
             }
-        }).start();
+        } catch (Exception e){
+            e.printStackTrace();
+        }
 
-        do {
-            System.out.printf("[%s]: ", playerName);
-            String message = scanner.nextLine();
-
-            client.sendMessage(message);
-            counter++;
-        } while (counter < 10);
-
-        System.out.println("Message Limit Reached! Exiting!");
         scanner.close();
     }
 }

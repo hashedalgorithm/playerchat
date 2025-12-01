@@ -1,95 +1,194 @@
 package com.hashedalgorithm.playerchat.server;
 
-import com.hashedalgorithm.playerchat.enums.Role;
+import com.hashedalgorithm.playerchat.utils.MessageParser;
 
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.PrintWriter;
-import java.net.ServerSocket;
+import java.awt.*;
+import java.io.*;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.logging.Logger;
 
 
 public class ClientInstance extends Thread {
-    private Socket clientSocket;
-    private ServerSocket serverSocket;
-    private String name;
-    private final Role role;
+    private static final Logger logger = Logger.getLogger(ClientInstance.class.getName());
+    private final Socket clientSocket;
+    private final int clientInstanceId;
     private final Server server;
     private final PrintWriter out;
     private final BufferedReader in;
+    private String name;
     private int counter = 0;
+    MessageParser parser = new MessageParser();
 
-    public ClientInstance(Server server, Socket clientSocket, Role role) throws IOException {
+    public ClientInstance(int instanceId, Server server, Socket clientSocket) throws IOException {
+        this.clientInstanceId = instanceId;
         this.clientSocket = clientSocket;
         this.server = server;
-        this.role = role;
 
         this.out = new PrintWriter(clientSocket.getOutputStream(), true);
         this.in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
-        this.clientSocket.setSoTimeout(5000);
 
+        this.handshake();
+    }
+
+    private void sendInstanceMetadetailsToClient() throws IOException {
+        Map<String, String> result = new HashMap<>(Map.of(
+                "id", String.valueOf(this.clientInstanceId)
+        ));
+
+        String serializedMessage = this.parser.serialize(result);
+        this.out.println(serializedMessage);
+    }
+
+    private void receiveInstanceMetadetailsFromClient() throws IOException {
         while (true) {
             try {
-                this.name = in.readLine();
-                System.out.printf("[+] - %s has been joined as %s.\n", this.name, role.getValue());
+                String raw = this.in.readLine();
 
-                this.clientSocket.setSoTimeout(1000 * 60);
-                out.println(role.getValue());
-                break;
+                Map<String, String> parsed = parser.parseMessage(raw);
+
+                String name = parsed.get("name");
+                if(name == null) {
+                    throw new IOException("[!] - Invalid request!");
+                }
+
+                this.name = name;
+                return;
             } catch (SocketTimeoutException e) {
-                System.out.println("[+] - Waiting for client details!!!");
+                System.out.println("[!] - Timeout while handshake! Retrying...");
             }
         }
     }
 
-    public void sendMessage(String message, Role to) throws IOException {
+    private void handshake() {
+        try{
+
+            System.out.printf("[+] - Initiating handshake with client - %d\n", this.clientInstanceId);
+
+            this.sendInstanceMetadetailsToClient();
+            this.clientSocket.setSoTimeout(5000);
+            this.receiveInstanceMetadetailsFromClient();
+            this.clientSocket.setSoTimeout(1000 * 60 * 2);
+
+            System.out.printf("[+] - Handshake with client[%d] - %s completed successfully!\n",  this.clientInstanceId, this.name);
+            this.clientSocket.setSoTimeout(0);
+        }
+        catch (IOException e){
+            System.out.println("[!] - Handshake failed! Exiting...");
+            System.exit(-1);
+        }
+    }
+
+    private String getClientName() {
+        return this.name;
+    }
+
+
+    public void closeInputBuffer() throws IOException {
+        this.in.close();
+    }
+    public void closeOutputBuffer() {
+        this.out.close();
+    }
+
+    public void closeConnection() throws IOException {
+        this.out.close();
+        this.in.close();
+        this.clientSocket.close();
+        System.out.printf("[+] - Connection closed for client %s\n", this.name);
+    }
+
+    public void sendMessage(String message, int to) throws IOException {
+        ClientInstance receiver = this.server.getClient(to);
+
         if(this.counter >= 10) {
             System.out.println("[+] - Maximum limit reached");
-            if(this.role == Role.RECEIVER) {
-                this.server.receiver.clientSocket.close();
-            }
-
-            if(this.role == Role.INITIATOR) {
-                this.server.initiator.clientSocket.close();
-            }
+            this.closeOutputBuffer();
             return;
         }
 
-        if(to == Role.INITIATOR){
-            this.server.receiver.out.println(String.format("[%s][%d]: {%s}", this.name, this.counter + 1, message));
-            this.counter = counter + 1;
-            return;
+        this.counter = counter + 1;
 
-        }
+        Map<String, String> result = new HashMap<>(Map.of(
+                "from", String.valueOf(this.clientInstanceId),
+                "to", String.valueOf(to),
+                "message", message
+        ));
 
-        if(to == Role.RECEIVER){
-            this.server.initiator.out.println(String.format("[%s][%d]: {%s}", this.name,this.counter + 1, message));
-            this.counter = counter + 1;
-            return;
-        }
+        String serializedMessage = this.parser.serialize(result);
 
+        receiver.out.println(serializedMessage);
+    }
 
-        throw new IllegalArgumentException("Invalid Role");
+    private void sendRequest(int to) {
 
     }
+
+    private void processClientRawData(String raw) throws IOException {
+        Map<String, String> parsed = parser.parseMessage(raw);
+
+        String message = parsed.get("message");
+        int request = Integer.parseInt(parsed.get("request"));
+        int from = Integer.parseInt(parsed.get("from"));
+        int to = Integer.parseInt(parsed.get("to"));
+
+        if(request > 0) {
+            this.processClientRequests(request);
+            return;
+        }
+
+        if(message != null && to > 0) {
+            this.processClientMessage(from, to, message);
+        }
+
+    }
+
+    public void processClientRequests(int request) throws IOException {
+        new Thread(() -> {
+            while (true) {
+                ClientInstance receiver = this.server.getClient(request);
+
+                if(receiver == null) {
+                    System.out.println("[!] - No such player exists!");
+                    break;
+                }
+
+                Map<String, String> result = new HashMap<>(Map.of(
+                        "from", String.valueOf(this.clientInstanceId),
+                        "request", String.valueOf(request)
+
+                ));
+                receiver.out.println(parser.serialize(result));
+
+            }
+        }).start();
+    }
+
+    private void processClientMessage(int from, int to, String message) throws IOException {
+        ClientInstance receiver = this.server.getClient(to);
+
+        System.out.printf("[+] - Received message: from %s, to %s \n", from, receiver.getClientName());
+        this.sendMessage(message, receiver.clientInstanceId);
+    }
+
 
     public void run() {
         try {
-            String inputLine;
-            this.clientSocket.setSoTimeout(0);
-            do {
-                inputLine = in.readLine();
-                System.out.printf("[+] - Received message from %s\n", this.name);
-                this.sendMessage(inputLine, this.role);
+            while (true) {
+
+                String raw = this.in.readLine();
+                if (raw == null) {
+                    break;
+                }
+
+                this.processClientRawData(raw);
             }
-            while (inputLine != null);
-            in.close();
 
         }
         catch (IOException e) {
-            e.printStackTrace();
+            logger.severe(e.getMessage());
         }
     }
 
