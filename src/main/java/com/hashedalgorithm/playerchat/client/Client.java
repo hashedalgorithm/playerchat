@@ -19,13 +19,13 @@ import java.util.Scanner;
 public class Client extends Thread {
     public String instanceId;
     private Socket clientSocket;
-    private String reciepientInstanceId;
+    private String recipientInstanceId;
     private PrintWriter out;
     private BufferedReader in;
     private int counter = 0;
     private final Scanner scanner = new Scanner(System.in);
     private final MessageParser parser = new MessageParser();
-    private Thread listner;
+    private Thread listener;
 
     public Client(String ip, int port) {
         try{
@@ -126,7 +126,7 @@ public class Client extends Thread {
     }
 
     private void sendMessageRequest(String to) {
-        if(this.reciepientInstanceId != null){
+        if(this.recipientInstanceId != null){
             System.out.printf("[+] - Already connected with a client %s.Dropping Chat Request Acknowledgement!\n", this.instanceId);
             return;
         }
@@ -183,8 +183,8 @@ public class Client extends Thread {
     public void handleMessageRequest() throws IOException {
         this.clientSocket.setSoTimeout(1000 * 60);
 
-        if(this.reciepientInstanceId != null){
-            System.out.printf("[+] - Already connected with a client %s. Dropping Message Request!\n", this.reciepientInstanceId);
+        if(this.recipientInstanceId != null){
+            System.out.printf("[+] - Already connected with a client %s. Dropping Message Request!\n", this.recipientInstanceId);
             return;
         }
         try{
@@ -209,20 +209,20 @@ public class Client extends Thread {
                 if(status != null) {
                     if(status.equals(PayloadValue.SUCCESS.getValue())) {
                         System.out.printf("[!] - Connected with %s!\n", from);
-                        this.reciepientInstanceId = from;
+                        this.recipientInstanceId = from;
                         return;
                     }
 
                     if(status.equals(PayloadValue.FAILED.getValue())) {
                         System.out.printf("[!] - Could not connect with %s!\n", from);
-                        this.reciepientInstanceId = null;
+                        this.recipientInstanceId = null;
                         return;
                     }
 
                     throw new IOException(String.format("[!] - Invalid payload received from server! %s!", from));
                 }else{
                     this.handleMessageRequestConfirmation(from, ClientStatus.SUCCESS);
-                    this.reciepientInstanceId = from;
+                    this.recipientInstanceId = from;
                     return;
                 }
             }
@@ -234,7 +234,7 @@ public class Client extends Thread {
 
     public void listenForIncomingMessages(){
         while (true) {
-            if(this.reciepientInstanceId == null){
+            if(this.recipientInstanceId == null){
                 continue;
             }
 
@@ -254,7 +254,7 @@ public class Client extends Thread {
     }
 
     public void sendMessage(String message) throws IOException {
-        if(this.reciepientInstanceId == null){
+        if(this.recipientInstanceId == null){
             System.out.println("[+] - No Recipient is connected! Try again after starting a session\n");
             return;
         }
@@ -267,7 +267,7 @@ public class Client extends Thread {
 
         Map<String, String> result = new HashMap<>(Map.of(
                 Payload.FROM.getValue(), this.instanceId,
-                Payload.TO.getValue(), this.reciepientInstanceId,
+                Payload.TO.getValue(), this.recipientInstanceId,
                 Payload.MESSAGE.getValue(), message
         ));
 
@@ -292,7 +292,7 @@ public class Client extends Thread {
 
         try{
             while(true) {
-                if(this.reciepientInstanceId == null){
+                if(this.recipientInstanceId == null){
                     switch (choice) {
                         case 1: {
                             System.out.print("[+] - Enter player Id: ");
@@ -317,9 +317,9 @@ public class Client extends Thread {
                         default: System.out.println("[!] - Invalid request! Try again!");
                     }
                 } else {
-                    if(this.listner == null) {
-                        this.listner = new Thread(this::listenForIncomingMessages);
-                        this.listner.start();
+                    if(this.listener == null) {
+                        this.listener = new Thread(this::listenForIncomingMessages);
+                        this.listener.start();
                     }
 
                     System.out.printf("[%s]: ", this.instanceId);
