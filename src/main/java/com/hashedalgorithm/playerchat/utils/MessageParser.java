@@ -1,7 +1,7 @@
 package com.hashedalgorithm.playerchat.utils;
 
-import java.util.Arrays;
 import java.util.HashMap;
+import java.util.Iterator;
 import java.util.Map;
 
 public class MessageParser {
@@ -12,8 +12,6 @@ public class MessageParser {
         // Split the string based on the '|' delimiter
         String[] parts = message.split("\\|");
 
-        System.out.println(message);
-        System.out.println(Arrays.toString(parts));
         for (String part : parts) {
             // Split each part into key and value using ':'
             String[] keyValue = part.split(":", 2);
@@ -21,17 +19,22 @@ public class MessageParser {
                 result.put(keyValue[0].trim(), keyValue[1].trim());
             }
         }
-
-        System.out.println(result.toString());
         return result;
     }
 
     public String serialize(Map<String, String> message) {
         StringBuilder result = new StringBuilder();
-        for (Map.Entry<String, String> entry : message.entrySet()) {
-            result.append(entry.getKey()).append(":").append(entry.getValue()).append("|");
-        }
 
+        Iterator<Map.Entry<String, String>> iterator = message.entrySet().iterator();
+
+        while (iterator.hasNext()) {
+            Map.Entry<String, String> entry = iterator.next();
+            result.append(entry.getKey()).append(":").append(entry.getValue());
+
+            if (iterator.hasNext()) {
+                result.append("|");
+            }
+        }
         return result.toString();
     }
 }

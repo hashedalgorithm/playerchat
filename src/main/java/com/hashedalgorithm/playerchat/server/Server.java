@@ -10,7 +10,7 @@ public class Server {
     private static final Logger logger = Logger.getLogger(Server.class.getName());
     private ServerSocket serverSocket;
 
-    public Map<Integer, ClientInstance> clients = new HashMap<>();
+    public Map<String, ClientInstance> clients = new HashMap<>();
 
     public Server(int port) throws IOException {
         try {
@@ -24,19 +24,19 @@ public class Server {
         }
     }
 
-    public ClientInstance getClient(int clientInstanceId) {
+    public ClientInstance getClient(String clientInstanceId) {
         return this.clients.getOrDefault(clientInstanceId, null);
     }
 
-    private int generateId() {
-        return this.clients.size() + 1;
+    public boolean isClientExists(String clientInstanceId) {
+        return this.clients.containsKey(clientInstanceId);
     }
 
-    public void closeClientInstance(int instanceId) throws IOException {
+    public void closeClientInstance(String instanceId) throws IOException {
         ClientInstance client = this.clients.get(instanceId);
 
         if(client == null) {
-            System.out.printf("[+] - No client with id %d found.\n", instanceId);
+            System.out.printf("[+] - No client with id %s found.\n", instanceId);
             return;
         }
 
@@ -44,7 +44,7 @@ public class Server {
         this.clients.remove(instanceId);
     }
 
-    private void listen() {
+    public void start() {
         new Thread(() -> {
             try {
                 System.out.println("[+] - Listening for connections...");
@@ -57,9 +57,8 @@ public class Server {
 
                     Socket clientSocket = serverSocket.accept();
 
-                    int instanceId = generateId();
-                    ClientInstance instance = new ClientInstance(instanceId,this, clientSocket);
-                    this.clients.put(instanceId, instance);
+                    ClientInstance instance = new ClientInstance(this, clientSocket);
+                    this.clients.put(instance.instanceId, instance);
                     instance.start();
                 }
             } catch (IOException e) {
@@ -69,15 +68,4 @@ public class Server {
         }).start();
     }
 
-    public void start() {
-        this.listen();
-    }
-
 }
-
-// req
-// from
-// to
-// msg
-// id
-// name

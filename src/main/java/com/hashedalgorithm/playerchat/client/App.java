@@ -6,35 +6,31 @@ public class App {
 
     public static void main(String[] args) {
 
-        Scanner scanner = new Scanner(System.in);
+//        Scanner scanner = new Scanner(System.in);
 
         System.out.println("Player Chat Client - by SanjayKumar Kumaravelan");
-        System.out.println("----------------------------------------");
+        System.out.println("-----------------------------------------------");
         System.out.println();
-
-        System.out.print("[+] - Enter your chat name: ");
-        String name = scanner.nextLine();
 
 //      System.out.print("[+] - Enter ip: ");
 //      String ip = scanner.nextLine();
 //      System.out.print("[+] - Enter server port: ");
 //      int port = Integer.parseInt(scanner.nextLine().trim());
 
-        Client client = new Client(scanner, name, "127.0.0.1", 12345);
+        Client client = new Client( "127.0.0.1", 12345);
+        client.start();
 
-        client.listenForIncomingMessages();
+//        try{
+//            while(true){
+//                System.out.printf("[%s]: ", name);
+//                String message = scanner.nextLine();
+//
+//                client.sendMessage(message);
+//            }
+//        } catch (Exception e){
+//            e.printStackTrace();
+//        }
 
-        try{
-            while(true){
-                System.out.printf("[%s]: ", name);
-                String message = scanner.nextLine();
-
-                client.sendMessage(message);
-            }
-        } catch (Exception e){
-            e.printStackTrace();
-        }
-
-        scanner.close();
+//        scanner.close();
     }
 }
