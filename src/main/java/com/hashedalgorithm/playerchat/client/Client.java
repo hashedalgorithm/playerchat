@@ -16,20 +16,74 @@ import java.util.HashMap;
 import java.util.Map;
 import java.util.Scanner;
 
+
+/**
+ * Client represents a chat client that connects to a {@link com.hashedalgorithm.playerchat.server.Server}.
+ * Each client runs in its own thread and can send/receive messages from other clients.
+ *
+ * <p>The Client performs a handshake with the server, maintains a connection,
+ * and enforces message limits using {@link #MAX_MESSAGES}.
+ * It also manages separate threads for listening to incoming messages and user input.
+ *
+ * <p>Example usage:
+ * <pre>
+ *     Client client = new Client("127.0.0.1", 12345);
+ *     client.start();
+ * </pre>
+ *
+ * <p>Thread safety: The client uses multiple threads (main thread, listener, inputListener)
+ * to handle messages asynchronously. Access to shared fields like {@link #counter} and
+ * {@link #receivedMessageCounter} should be carefully managed.
+ *
+ * @author Sanjay
+ * @version 1.0
+ * @since 2025-12-06
+ */
+
 public class Client extends Thread {
-    public static final int MAX_MESSAGES = 3;
+    /** Maximum number of messages a client can send or receive */
+    public static final int MAX_MESSAGES = 10;
+
+    /** Unique identifier for this client */
     public String instanceId;
+
+    /** Socket connected to the server */
     private Socket clientSocket;
+
+    /** Instance ID of the connected recipient client */
     private String recipientInstanceId;
+
+    /** Output stream to the server */
     private PrintWriter out;
+
+    /** Input stream from the server */
     private BufferedReader in;
+
+    /** Counter for messages sent */
     private int counter = 1;
-    private final Scanner scanner = new Scanner(System.in);
-    private final MessageParser parser = new MessageParser();
-    private Thread listener;
-    private Thread inputListener;
+
+    /** Counter for messages received */
     private int receivedMessageCounter = 1;
 
+    /** Scanner to read user input */
+    private final Scanner scanner = new Scanner(System.in);
+
+    /** Parser for serializing/deserializing messages */
+    private final MessageParser parser = new MessageParser();
+
+    /** Thread to listen for incoming messages */
+    private Thread listener;
+
+    /** Thread to listen for user input messages */
+    private Thread inputListener;
+
+    /**
+     * Constructs a Client that connects to the specified server IP and port.
+     * Initiates a handshake immediately after connecting.
+     *
+     * @param ip   The server IP address
+     * @param port The server port
+     */
     public Client(String ip, int port) {
         try{
 
@@ -46,11 +100,20 @@ public class Client extends Thread {
 
     }
 
+    /**
+     * Prompts the user to enter their chat name and sets {@link #instanceId}.
+     */
     private void initializeClient() {
         System.out.print("[+] - Enter your chat name: ");
         this.instanceId = scanner.nextLine();
     }
 
+    /**
+     * Connects the client to the server at the specified IP and port.
+     *
+     * @param ip   Server IP address
+     * @param port Server port
+     */
     private void connectToServer(String ip, int port) {
         try{
             this.clientSocket = new Socket(ip, port);
@@ -61,6 +124,9 @@ public class Client extends Thread {
         }
     }
 
+    /**
+     * Performs the handshake process with the server and waits for acknowledgment.
+     */
     private void handshakeReceiveAckFromServer() {
         int retries = 4;
         while (retries > 0) {
@@ -104,6 +170,9 @@ public class Client extends Thread {
         }
     }
 
+    /**
+     * Sends the client instance ID to the server for handshake.
+     */
     private void handshakeSendInstanceIdToServer() {
         Map<String, String> result = new HashMap<>(Map.of(
                 Payload.REQUEST.getValue(), PayloadValue.HANDSHAKE.getValue(),
@@ -113,6 +182,10 @@ public class Client extends Thread {
         this.writeOutputBuffer(this.parser.serialize(result));
     }
 
+    /**
+     * Receives and validates the server handshake acknowledgment.
+     * Exits the program if handshake fails.
+     */
     private void handshake() throws SocketException {
         System.out.println("[+] - Initiating handshake with server");
 
@@ -124,11 +197,22 @@ public class Client extends Thread {
         this.clientSocket.setSoTimeout(0);
     }
 
+
+    /**
+     * Sends a serialized message to the server.
+     *
+     * @param message The serialized message string
+     */
     private void writeOutputBuffer(String message) {
         this.out.println(message);
         this.out.flush();
     }
 
+    /**
+     * Sends a chat request to another client.
+     *
+     * @param to Recipient client ID
+     */
     private void sendMessageRequest(String to) {
         if(this.recipientInstanceId != null){
             System.out.printf("[+] - Already connected with a client %s.Dropping Chat Request Acknowledgement!\n", this.instanceId);
@@ -144,6 +228,11 @@ public class Client extends Thread {
         this.writeOutputBuffer(this.parser.serialize(result));
     }
 
+    /**
+     * Handles incoming chat request confirmation from the server.
+     *
+     * @param to Sender client ID
+     */
     private void handleMessageRequestConfirmation(String to) {
         System.out.printf("[+] - Accepting message request from %s \n", to);
         Map<String, String> result = new HashMap<>(Map.of(
@@ -156,7 +245,9 @@ public class Client extends Thread {
         this.writeOutputBuffer(this.parser.serialize(result));
     }
 
-
+    /**
+     * Closes the client connection and associated streams.
+     */
     private void closeConnection() {
         try{
             this.out.close();
@@ -167,6 +258,22 @@ public class Client extends Thread {
         }
     }
 
+    /**
+     * Processes a raw message received from the server.
+     *
+     * <p>This method parses the raw message using the {@link MessageParser} and
+     * determines if it is a valid message payload. It handles the following:
+     * <ul>
+     *     <li>If the payload contains all fields (request, from, to, message, status), it
+     *         is considered invalid and an {@link IOException} is thrown.</li>
+     *     <li>If the payload contains a message and a sender, it calls
+     *         {@link #processMessage(String, String)} to display the message.</li>
+     *     <li>Any other payload structure is considered invalid and triggers an exception.</li>
+     * </ul>
+     *
+     * @param raw The raw message string received from the server.
+     * @throws IOException If the payload is invalid or cannot be processed.
+     */
     private void processServerRawData(String raw) throws IOException {
         Map<String, String> parsed = parser.parseMessage(raw);
 
@@ -188,6 +295,24 @@ public class Client extends Thread {
         throw new IOException(String.format("Invalid payload received from client %s!", from));
     }
 
+    /**
+     * Handles an incoming message request from another client.
+     *
+     * <p>This method reads from the server input stream and waits for a message request
+     * or confirmation. It enforces a retry mechanism and a socket timeout to handle
+     * network delays. Specifically:
+     * <ul>
+     *     <li>If the client is already connected to another recipient, the request is ignored.</li>
+     *     <li>If a valid SUCCESS status is received, the {@link #recipientInstanceId} is set and the method returns.</li>
+     *     <li>If a FAILED status is received, an {@link IOException} is thrown.</li>
+     *     <li>If no status is present, the method automatically confirms the request
+     *         by calling {@link #handleMessageRequestConfirmation(String)}.</li>
+     * </ul>
+     *
+     * <p>Retries up to 4 times in case of socket timeouts.
+     *
+     * @throws IOException If the payload from the server is invalid or connection fails.
+     */
     private void handleMessageRequest() throws IOException {
         int retries =  4;
         this.clientSocket.setSoTimeout(1000 * 60);
@@ -237,7 +362,9 @@ public class Client extends Thread {
         }
     }
 
-
+    /**
+     * Listens for incoming messages from the server and processes them.
+     */
     private void listenForIncomingMessages() {
         while (this.receivedMessageCounter <= MAX_MESSAGES) {
             if(this.recipientInstanceId == null){
@@ -262,6 +389,9 @@ public class Client extends Thread {
         }
     }
 
+    /**
+     * Listens for user input messages and sends them to the recipient.
+     */
     private void listenForMessageInputs() {
         while (this.counter <= MAX_MESSAGES) {
             System.out.printf("[%s]: {%d} - ", this.instanceId, this.counter);
@@ -269,6 +399,11 @@ public class Client extends Thread {
         }
     }
 
+    /**
+     * Sends a message to the connected recipient.
+     *
+     * @param message The message content
+     */
     private void sendMessage(String message) {
         if(this.recipientInstanceId == null){
             System.out.println("[+] - No Recipient is connected! Try again after starting a session\n");
@@ -292,6 +427,13 @@ public class Client extends Thread {
         this.counter += 1;
     }
 
+    /**
+     * Processes a message received from the server.
+     *
+     * @param from Sender client ID
+     * @param message Message content
+     * @throws IOException if an error occurs during processing
+     */
     private void processMessage(String from, String message) throws IOException {
         // Moves the cursor to first position
         System.out.print("\r\033[2K");
@@ -303,6 +445,10 @@ public class Client extends Thread {
         this.receivedMessageCounter += 1;
     }
 
+    /**
+     * Main thread execution for the client. Displays menu, handles
+     * input, starts listener threads for messages and user input.
+     */
     public void run() {
         System.out.println("[+] - Choose from menu");
         System.out.println("\t1. Send Chat Request\n\t2. Listen for Chat Request\n\t3. Exit");

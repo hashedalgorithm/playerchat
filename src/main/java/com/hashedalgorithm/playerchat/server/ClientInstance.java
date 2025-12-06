@@ -14,17 +14,65 @@ import java.net.SocketTimeoutException;
 import java.util.HashMap;
 import java.util.Map;
 
+/**
+ * ClientInstance represents a connected client on the chat server.
+ * Each ClientInstance runs in its own thread, handles communication
+ * with its respective client socket, and manages handshake, message
+ * sending, and receiving.
+ *
+ * <p>This class enforces a maximum number of messages per client using
+ * {@link #MAX_MESSAGES}. Messages are forwarded to other clients via
+ * the {@link Server} instance.
+ *
+ * <p>Example usage:
+ * <pre>
+ *     Socket socket = serverSocket.accept();
+ *     ClientInstance client = new ClientInstance(server, socket);
+ *     client.start();
+ * </pre>
+ *
+ * <p>Thread safety: Each client runs in its own thread, but {@link Server#clients}
+ * map access must be synchronized if accessed by multiple threads concurrently.
+ *
+ * @author Sanjay
+ * @version 1.0
+ * @since 2025-12-06
+ */
 
 public class ClientInstance extends Thread {
+
+    /** Maximum messages allowed per client */
     private final int MAX_MESSAGES= 10;
+
+    /** Unique identifier for this client instance */
     public String instanceId;
+
+    /** Socket connected to the client */
     private final Socket clientSocket;
+
+    /** Reference to the main Server instance */
     private final Server server;
+
+    /** Output stream to the client */
     private final PrintWriter out;
+
+    /** Input stream to the client */
     private final BufferedReader in;
+
+    /** Counter to track number of messages sent */
     private int counter = 0;
+
+    /** Parser for serializing and deserializing messages */
     private final MessageParser parser = new MessageParser();
 
+    /**
+     * Constructs a ClientInstance for a given server and client socket.
+     * Initiates a handshake to authenticate and register the client.
+     *
+     * @param server       Reference to the server instance
+     * @param clientSocket The connected client socket
+     * @throws IOException if an I/O error occurs during handshake setup
+     */
     public ClientInstance(Server server, Socket clientSocket) throws IOException {
         this.clientSocket = clientSocket;
         this.server = server;
@@ -35,11 +83,21 @@ public class ClientInstance extends Thread {
         this.handshake();
     }
 
+    /**
+     * Sends a message to the client via the output buffer.
+     *
+     * @param message The message to send
+     */
     private void writeOutputBuffer(String message){
         this.out.println(message);
         this.out.flush();
     }
 
+    /**
+     * Sends handshake confirmation to the client with status SUCCESS.
+     *
+     * @throws IOException if the client instance ID is null or handshake fails
+     */
     private void sendConfirmationToClient() throws IOException {
 
         if(this.instanceId == null){
@@ -56,6 +114,11 @@ public class ClientInstance extends Thread {
         this.writeOutputBuffer(this.parser.serialize(result));
     }
 
+    /**
+     * Rejects a client handshake request with status FAILED.
+     *
+     * @param from The client ID attempting handshake
+     */
     private void rejectClientHandshakeRequest(String from) {
         Map<String, String> result = new HashMap<>(Map.of(
                 Payload.REQUEST.getValue(), PayloadValue.HANDSHAKE.getValue(),
@@ -66,6 +129,11 @@ public class ClientInstance extends Thread {
         this.writeOutputBuffer(this.parser.serialize(result));
     }
 
+    /**
+     * Receives and validates the client's instance ID during handshake.
+     *
+     * @throws IOException if the handshake fails, client already exists, or input is invalid
+     */
     private void receiveInstanceIdFromClient() throws IOException {
         int retries = 3;
         while (retries != 0) {
@@ -103,6 +171,10 @@ public class ClientInstance extends Thread {
         System.out.println("[!] - Timeout in handshake! Aborting...");
     }
 
+    /**
+     * Performs the handshake process with the client, including receiving instance ID
+     * and sending confirmation.
+     */
     private void handshake() {
         try{
 
@@ -120,6 +192,9 @@ public class ClientInstance extends Thread {
         }
     }
 
+    /**
+     * Closes the connection to the client and removes it from the server's client map.
+     */
     private void closeConnection() {
         try{
             this.out.close();
@@ -130,6 +205,13 @@ public class ClientInstance extends Thread {
         }
     }
 
+    /**
+     * Sends a message to another client via the server.
+     *
+     * @param message The message to send
+     * @param to      The recipient client instance ID
+     * @throws IOException if the message limit is reached
+     */
     private void sendMessage(String message, String to) throws IOException {
         ClientInstance receiver = this.server.getClient(to);
 
@@ -149,6 +231,13 @@ public class ClientInstance extends Thread {
         receiver.out.println(serializedMessage);
     }
 
+
+    /**
+     * Parses and handles raw messages received from the client.
+     *
+     * @param raw The raw serialized message from the client
+     * @throws IOException if the payload is invalid
+     */
     private void handleClientRawData(String raw) throws IOException {
         Map<String, String> parsed = parser.parseMessage(raw);
 
@@ -181,6 +270,13 @@ public class ClientInstance extends Thread {
         throw new IOException(String.format("Invalid payload received from client %s!", from));
     }
 
+    /**
+     * Sends a confirmation of a message request to the recipient.
+     *
+     * @param from   The sender client ID
+     * @param to     The recipient client ID
+     * @param status The status of the request
+     */
     private void forwardMessageRequestConfirmation(String from, String to, String status){
         System.out.printf("[+] - Message request confirmation from %s to %s is %s\n", from, to, status);
 
@@ -198,6 +294,12 @@ public class ClientInstance extends Thread {
         }
     }
 
+    /**
+     * Forwards a message request from a sender to the recipient.
+     *
+     * @param from The sender client ID
+     * @param to   The recipient client ID
+     */
     private void forwardMessageRequest(String from, String to) {
         System.out.printf("[+] - Message request from %s to %s\n", from, to);
 
@@ -218,12 +320,23 @@ public class ClientInstance extends Thread {
         receiver.out.println(serializedRequest);
     }
 
+    /**
+     * Processes a client message and forwards it to the recipient.
+     *
+     * @param from    Sender client ID
+     * @param to      Recipient client ID
+     * @param message The message content
+     * @throws IOException If sending fails
+     */
     private void processClientMessage(String from, String to, String message) throws IOException {
         System.out.printf("[+] - Received message: from %s, to %s \n", from, to);
         this.sendMessage(message, to);
     }
 
-
+    /**
+     * The main thread execution. Continuously reads messages from the client
+     * and handles them accordingly.
+     */
     public void run() {
         try {
             while (true) {
