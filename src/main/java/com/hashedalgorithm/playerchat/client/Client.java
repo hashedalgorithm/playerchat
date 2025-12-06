@@ -26,9 +26,11 @@ public class Client extends Thread {
     private final Scanner scanner = new Scanner(System.in);
     private final MessageParser parser = new MessageParser();
     private Thread listener;
+    private int receivedMessageCounter = 0;
 
     public Client(String ip, int port) {
         try{
+
             this.initializeClient();
             this.connectToServer(ip, port);
 
@@ -36,11 +38,10 @@ public class Client extends Thread {
             this.in = new BufferedReader(new InputStreamReader(clientSocket.getInputStream()));
 
             this.handshake();
-
-        } catch (IOException e) {
-            System.err.println("[!] - Could not connect to the server");
-            System.exit(-1);
+        } catch(IOException e){
+            System.err.printf("[!] - %s\n", e.getMessage());
         }
+
     }
 
     private void initializeClient() {
@@ -48,50 +49,53 @@ public class Client extends Thread {
         this.instanceId = scanner.nextLine();
     }
 
-    private void connectToServer(String ip, int port) throws IOException {
+    private void connectToServer(String ip, int port) {
         try{
             this.clientSocket = new Socket(ip, port);
             System.out.println("[+] - Connected to server successfully!");
-        } catch (SocketTimeoutException e){
-            System.out.println("[!] - Could not connect to the server!");
+        } catch (IOException e) {
+            System.err.println("[!] - Could not connect to the server!");
+            System.exit(-1);
         }
     }
 
     private void handshakeReceiveAckFromServer() {
-        while (true) {
+        int retries = 4;
+        while (retries > 0) {
             try {
                 String raw = this.in.readLine();
-                if(raw == null) {
-                    throw new IOException("Raw message is empty!");
-                }
+                if(raw == null) throw new NullPointerException();
+
                 Map<String, String> parsed = parser.parseMessage(raw);
 
                 String req = parsed.get(Payload.REQUEST.getValue());
                 String id = parsed.get(Payload.INSTANCE_ID.getValue());
                 String status = parsed.get(Payload.STATUS.getValue());
 
-                if(req == null || id == null || status == null) {
-                    throw new IOException("Invalid server response!");
-                }
+                if(req == null || id == null || status == null) throw new IOException("Invalid server response!");
 
-                if(!id.equals(this.instanceId) ) {
-                    throw new IOException("[!] - Instance Id Mismatch!");
-                }
+                if(!id.equals(this.instanceId) ) throw new IOException("Instance Id Mismatch!");
+
 
                 if(status.equals(ClientStatus.SUCCESS.getValue())) {
                     System.out.printf("[+] - Instance ID: %s. Share this to other user to start chatting with them.\n", this.instanceId);
                     return;
                 }
 
-                if(status.equals(ClientStatus.FAILED.getValue())) {
-                    throw new IOException();
-                }
+                if(status.equals(ClientStatus.FAILED.getValue())) throw new IOException("Client/Server rejected connection!");
 
+                throw new IOException("Invalid server response!");
+            }
+            catch (NullPointerException e) {
+                System.err.println("[!] - Connection closed with server! Handshake failed!");
+                System.exit(-1);
             }
             catch (SocketTimeoutException e) {
+                retries--;
                 System.out.println("[+] - Waiting for server!");
             }
             catch (IOException e) {
+                System.err.printf("[!] - %s\n!", e.getMessage());
                 System.out.println("[!] - Handshake failed! Exiting...");
                 System.exit(-1);
             }
@@ -104,9 +108,7 @@ public class Client extends Thread {
                 Payload.FROM.getValue(), this.instanceId
         ));
 
-        String serializedRequest = this.parser.serialize(result);
-        this.out.println(serializedRequest);
-        this.out.flush();
+        this.writeOutputBuffer(this.parser.serialize(result));
     }
 
     private void handshake() throws SocketException {
@@ -140,23 +142,27 @@ public class Client extends Thread {
         this.writeOutputBuffer(this.parser.serialize(result));
     }
 
-    private void handleMessageRequestConfirmation(String to, ClientStatus clientStatus) {
+    private void handleMessageRequestConfirmation(String to) {
         System.out.printf("[+] - Accepting message request from %s \n", to);
         Map<String, String> result = new HashMap<>(Map.of(
                 Payload.FROM.getValue(), this.instanceId,
                 Payload.TO.getValue(), to,
                 Payload.REQUEST.getValue(), PayloadValue.MESSAGE.getValue(),
-                Payload.STATUS.getValue(), clientStatus.getValue()
+                Payload.STATUS.getValue(), ClientStatus.SUCCESS.getValue()
         ));
 
         this.writeOutputBuffer(this.parser.serialize(result));
     }
 
 
-    private void closeConnection() throws IOException {
-        this.out.close();
-        this.in.close();
-        this.clientSocket.close();
+    private void closeConnection() {
+        try{
+            this.out.close();
+            this.in.close();
+            this.clientSocket.close();
+        } catch(IOException e) {
+            System.err.printf("[!] - %s\n", e.getMessage());
+        }
     }
 
     private void processServerRawData(String raw) throws IOException {
@@ -169,7 +175,7 @@ public class Client extends Thread {
         String message = parsed.get(Payload.MESSAGE.getValue());
 
         if(null != request && from != null && to != null && message != null && status != null) {
-            throw new IOException(String.format("[!] - Invalid payload received from server %s!", from));
+            throw new IOException(String.format("Invalid payload received from server %s!", from));
         }
 
         if(message != null && from != null) {
@@ -177,24 +183,22 @@ public class Client extends Thread {
             return;
         }
 
-        throw new IOException(String.format("[!] - Invalid payload received from client %s!", from));
+        throw new IOException(String.format("Invalid payload received from client %s!", from));
     }
 
     public void handleMessageRequest() throws IOException {
+        int retries =  4;
         this.clientSocket.setSoTimeout(1000 * 60);
 
         if(this.recipientInstanceId != null){
             System.out.printf("[+] - Already connected with a client %s. Dropping Message Request!\n", this.recipientInstanceId);
             return;
         }
-        try{
-            while(true) {
+        while(retries > 0) {
+            try{
                 String raw = this.in.readLine();
 
-                if(raw == null) {
-                    System.out.println("[!] - Received empty response from server!");
-                    return;
-                }
+                if(raw == null) throw new NullPointerException();
 
                 Map<String, String> parsed = parser.parseMessage(raw);
 
@@ -202,67 +206,69 @@ public class Client extends Thread {
                 String from = parsed.get(Payload.FROM.getValue());
                 String status = parsed.get(Payload.STATUS.getValue());
 
-                if(request == null || from == null) {
-                    throw new IOException("[!] - Invalid payload received from server!");
-                }
+                if(request == null || from == null) throw new IOException("Invalid payload received from server!");
 
                 if(status != null) {
                     if(status.equals(PayloadValue.SUCCESS.getValue())) {
                         System.out.printf("[!] - Connected with %s!\n", from);
                         this.recipientInstanceId = from;
                         return;
-                    }
-
-                    if(status.equals(PayloadValue.FAILED.getValue())) {
-                        System.out.printf("[!] - Could not connect with %s!\n", from);
+                    } else if(status.equals(PayloadValue.FAILED.getValue())) {
                         this.recipientInstanceId = null;
-                        return;
-                    }
-
-                    throw new IOException(String.format("[!] - Invalid payload received from server! %s!", from));
-                }else{
-                    this.handleMessageRequestConfirmation(from, ClientStatus.SUCCESS);
+                        throw new IOException(String.format("Could not connect with %s!\n", from));
+                    } else throw new IOException(String.format("Invalid payload received from server! %s!", from));
+                } else {
+                    this.handleMessageRequestConfirmation(from);
                     this.recipientInstanceId = from;
                     return;
                 }
+            } catch (NullPointerException e) {
+                System.err.println("[!] - Connection closed with server! Message request failed!");
+                return;
             }
-        } catch (SocketTimeoutException e){
-            System.out.println("[!] - Waiting for server!");
+            catch (SocketTimeoutException e){
+                retries--;
+                System.out.println("[!] - Waiting for server!");
+            } catch (IOException e) {
+                System.out.printf("[!] - %s\n", e.getMessage());
+            }
         }
     }
 
 
-    public void listenForIncomingMessages(){
-        while (true) {
+    public void listenForIncomingMessages() {
+        while (this.receivedMessageCounter < 10) {
             if(this.recipientInstanceId == null){
-                continue;
+                System.out.println("[!] - No recipient is connected!");
+                break;
             }
 
             try {
                 String raw = in.readLine();
-                if (raw == null) {
-                    throw new IllegalStateException("[!] - Could not read from server!");
-                }
+                if (raw == null) throw new NullPointerException();
 
                 this.processServerRawData(raw);
-            } catch (SocketTimeoutException e) {
+            } catch (NullPointerException e) {
+                System.err.println("[!] - Connection closed with server!");
+                return;
+            }
+            catch (SocketTimeoutException e) {
                 System.out.println("[!] - Socket timeout! Waiting for reply...");
             } catch (IOException e) {
-
+                System.out.printf("[!] - %s\n", e.getMessage());
             }
         }
     }
 
-    public void sendMessage(String message) throws IOException {
+    public void sendMessage(String message) {
         if(this.recipientInstanceId == null){
             System.out.println("[+] - No Recipient is connected! Try again after starting a session\n");
             return;
         }
 
         if(this.counter >= 10){
-            System.out.println("[+] - Max limit reached!");
-            this.closeConnection();
-            throw new IOException("[+] - Max limit reached!");
+            System.out.println("[+] - Max limit reached! Now you can only receive messages!");
+            return;
         }
 
         Map<String, String> result = new HashMap<>(Map.of(
@@ -277,28 +283,36 @@ public class Client extends Thread {
         this.counter += 1;
     }
 
-    private void processMessage(String from, String message){
+    private void processMessage(String from, String message) throws IOException {
+        // Moves the cursor to first position
         System.out.print("\r\033[2K");
+        // Replaces the whole line
         System.out.printf("[%s]: %s\n", from, message);
-        System.out.printf("[%s]: ", this.instanceId);
+        if(this.counter < 10){
+            System.out.printf("[%s]: ", this.instanceId);
+        }
+        this.receivedMessageCounter += 1;
     }
 
     public void run() {
         System.out.println("[+] - Choose from menu");
         System.out.println("1. Send Chat Request\n2. Listen for Chat Request\n3. Exit");
-        System.out.print("[+] Your choice: ");
-        int choice = Integer.parseInt(this.scanner.nextLine());
-
-
+        int choice;
         try{
             while(true) {
                 if(this.recipientInstanceId == null){
+                    try{
+                        System.out.print("[+] Your choice: ");
+                        choice = Integer.parseInt(this.scanner.nextLine());
+                    } catch (NumberFormatException e){
+                        continue;
+                    }
                     switch (choice) {
                         case 1: {
                             System.out.print("[+] - Enter player Id: ");
                             String playerId = scanner.nextLine();
                             this.sendMessageRequest(playerId);
-                            System.out.println("[+] - Chat request sent successfully!");
+                            System.out.printf("[+] - Chat request to %s sent successfully!\n", playerId);
                             System.out.println("[+] - Waiting for the recipient to accept request");
 
                             this.handleMessageRequest();
@@ -311,6 +325,7 @@ public class Client extends Thread {
                         }
                         case 3: {
                             System.out.println("[+] - Exiting...");
+                            this.closeConnection();
                             System.exit(-1);
                             break;
                         }
@@ -322,12 +337,23 @@ public class Client extends Thread {
                         this.listener.start();
                     }
 
-                    System.out.printf("[%s]: ", this.instanceId);
-                    this.sendMessage(scanner.nextLine());
+                    if(counter >= 10 && this.receivedMessageCounter >= 10) {
+                        this.closeConnection();
+                        System.out.println("[+] - Exiting...!");
+                        System.exit(-1);
+                    }
+
+                    if(this.counter < 10){
+                        System.out.printf("[%s]: ", this.instanceId);
+                        this.sendMessage(scanner.nextLine());
+                    }
+
                 }
             }
+
         } catch (IOException e){
-            e.printStackTrace();
+            System.err.printf("[!] - %s\n", e.getMessage());
+            this.scanner.close();
         }
 
     }

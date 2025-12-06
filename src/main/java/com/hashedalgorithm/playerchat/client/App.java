@@ -1,7 +1,5 @@
 package com.hashedalgorithm.playerchat.client;
 
-import java.util.Scanner;
-
 public class App {
 
     public static void main(String[] args) {
