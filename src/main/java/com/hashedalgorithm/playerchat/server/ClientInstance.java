@@ -16,6 +16,7 @@ import java.util.Map;
 
 
 public class ClientInstance extends Thread {
+    private final int MAX_MESSAGES= 10;
     public String instanceId;
     private final Socket clientSocket;
     private final Server server;
@@ -132,7 +133,7 @@ public class ClientInstance extends Thread {
     private void sendMessage(String message, String to) throws IOException {
         ClientInstance receiver = this.server.getClient(to);
 
-        if(this.counter >= 10) {
+        if(this.counter >= MAX_MESSAGES) {
             this.out.close();
             throw new IOException("Maximum limit reached");
         }

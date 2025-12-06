@@ -17,6 +17,7 @@ import java.util.Map;
 import java.util.Scanner;
 
 public class Client extends Thread {
+    public static final int MAX_MESSAGES = 10;
     public String instanceId;
     private Socket clientSocket;
     private String recipientInstanceId;
@@ -237,7 +238,7 @@ public class Client extends Thread {
 
 
     public void listenForIncomingMessages() {
-        while (this.receivedMessageCounter < 10) {
+        while (this.receivedMessageCounter < MAX_MESSAGES) {
             if(this.recipientInstanceId == null){
                 System.out.println("[!] - No recipient is connected!");
                 break;
@@ -266,7 +267,7 @@ public class Client extends Thread {
             return;
         }
 
-        if(this.counter >= 10){
+        if(this.counter >= MAX_MESSAGES){
             System.out.println("[+] - Max limit reached! Now you can only receive messages!");
             return;
         }
@@ -288,7 +289,7 @@ public class Client extends Thread {
         System.out.print("\r\033[2K");
         // Replaces the whole line
         System.out.printf("[%s]: %s\n", from, message);
-        if(this.counter < 10){
+        if(this.counter < MAX_MESSAGES){
             System.out.printf("[%s]: ", this.instanceId);
         }
         this.receivedMessageCounter += 1;
@@ -337,14 +338,15 @@ public class Client extends Thread {
                         this.listener.start();
                     }
 
-                    if(counter >= 10 && this.receivedMessageCounter >= 10) {
+//                    System.out.printf("%d, %d\n", this.counter, this.receivedMessageCounter);
+                    if(this.counter >= MAX_MESSAGES && this.receivedMessageCounter >= MAX_MESSAGES) {
                         this.closeConnection();
                         System.out.println("[+] - Exiting...!");
                         System.exit(-1);
                     }
 
-                    if(this.counter < 10){
-                        System.out.printf("[%s]: ", this.instanceId);
+                    if(this.counter < MAX_MESSAGES){
+                        System.out.printf("[%s]: {%d} - ", this.instanceId, this.counter + 1);
                         this.sendMessage(scanner.nextLine());
                     }
 
