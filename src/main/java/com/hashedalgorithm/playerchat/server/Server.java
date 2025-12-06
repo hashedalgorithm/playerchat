@@ -4,23 +4,20 @@ import java.io.*;
 import java.net.*;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.logging.Logger;
 
-public class Server {
-    private static final Logger logger = Logger.getLogger(Server.class.getName());
+public class Server extends Thread {
     private ServerSocket serverSocket;
-
     public Map<String, ClientInstance> clients = new HashMap<>();
 
-    public Server(int port) throws IOException {
+    public Server(int port) {
         try {
+            System.out.printf("[+] - Starting Server on port: %s\n", port);
             this.serverSocket = new ServerSocket(port);
         } catch (BindException be) {
             System.out.printf("[+] - Port %d is already in use.\n", port);
             System.exit(1);
         } catch (IOException e) {
-            logger.severe(e.getMessage());
-            System.exit(1);
+            throw new RuntimeException(e.getMessage());
         }
     }
 
@@ -28,11 +25,7 @@ public class Server {
         return this.clients.getOrDefault(clientInstanceId, null);
     }
 
-    public boolean isClientExists(String clientInstanceId) {
-        return this.clients.containsKey(clientInstanceId);
-    }
-
-    public void closeClientInstance(String instanceId) throws IOException {
+    public void deleteClientInstance(String instanceId) throws IOException {
         ClientInstance client = this.clients.get(instanceId);
 
         if(client == null) {
@@ -40,32 +33,33 @@ public class Server {
             return;
         }
 
-        client.closeConnection();
+        System.out.printf("[+] - Deleting client id %s\n", instanceId);
         this.clients.remove(instanceId);
     }
 
-    public void start() {
-        new Thread(() -> {
-            try {
-                System.out.println("[+] - Listening for connections...");
-                while (true) {
+    public void run() {
+        try {
+            System.out.println("[+] - Server Started. Listening for connections.");
 
-                    if(clients.size() >= 10) {
-                        System.out.println("[+] - Maximum number of connections reached!.");
-                        System.out.println("[+] - Stopped listening.");
-                    }
+            while (true) {
 
-                    Socket clientSocket = serverSocket.accept();
-
-                    ClientInstance instance = new ClientInstance(this, clientSocket);
-                    this.clients.put(instance.instanceId, instance);
-                    instance.start();
+                if(clients.size() >= 10) {
+                    System.out.println("[+] - Maximum number of connections reached!.");
+                    System.out.println("[+] - Stopped listening.");
+                    continue;
                 }
-            } catch (IOException e) {
-                logger.severe(e.getMessage());
+
+                Socket clientSocket = serverSocket.accept();
+
+                ClientInstance instance = new ClientInstance(this, clientSocket);
+                this.clients.put(instance.instanceId, instance);
+                instance.start();
             }
 
-        }).start();
+        } catch (IOException e) {
+            System.out.printf("[!] - %s\n", e.getMessage());
+        }
+
     }
 
 }

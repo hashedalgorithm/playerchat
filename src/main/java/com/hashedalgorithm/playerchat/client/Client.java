@@ -62,7 +62,7 @@ public class Client extends Thread {
             try {
                 String raw = this.in.readLine();
                 if(raw == null) {
-                    throw new IOException("[!] - raw message is empty!");
+                    throw new IOException("Raw message is empty!");
                 }
                 Map<String, String> parsed = parser.parseMessage(raw);
 
@@ -71,7 +71,7 @@ public class Client extends Thread {
                 String status = parsed.get(Payload.STATUS.getValue());
 
                 if(req == null || id == null || status == null) {
-                    throw new IOException();
+                    throw new IOException("Invalid server response!");
                 }
 
                 if(!id.equals(this.instanceId) ) {

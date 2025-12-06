@@ -1,21 +1,21 @@
 package com.hashedalgorithm.playerchat.server;
 
 import com.hashedalgorithm.playerchat.enums.ClientStatus;
+import com.hashedalgorithm.playerchat.enums.Payload;
 import com.hashedalgorithm.playerchat.enums.PayloadValue;
 import com.hashedalgorithm.playerchat.utils.MessageParser;
-import com.hashedalgorithm.playerchat.enums.Payload;
 
-import java.io.*;
+import java.io.BufferedReader;
+import java.io.IOException;
+import java.io.InputStreamReader;
+import java.io.PrintWriter;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
 import java.util.HashMap;
 import java.util.Map;
-import java.util.Objects;
-import java.util.logging.Logger;
 
 
 public class ClientInstance extends Thread {
-    private static final Logger logger = Logger.getLogger(ClientInstance.class.getName());
     private final Socket clientSocket;
     public String instanceId;
     private final Server server;
@@ -42,8 +42,8 @@ public class ClientInstance extends Thread {
     private void sendConfirmationToClient() throws IOException {
 
         if(this.instanceId == null){
-            this.rejectClientHandshakeRequest("anonymous");
-            throw new IOException("[!] - Invalid request from this anonymous client! Dropping request!");
+            this.rejectClientHandshakeRequest(null);
+            throw new IOException("Invalid request from this anonymous client! Dropping request!");
         }
 
         Map<String, String> result = new HashMap<>(Map.of(
@@ -54,10 +54,11 @@ public class ClientInstance extends Thread {
 
         this.writeOutputBuffer(this.parser.serialize(result));
     }
-    private void rejectClientHandshakeRequest(String from) throws IOException {
+
+    private void rejectClientHandshakeRequest(String from) {
         Map<String, String> result = new HashMap<>(Map.of(
                 Payload.REQUEST.getValue(), PayloadValue.HANDSHAKE.getValue(),
-                Payload.INSTANCE_ID.getValue(), from,
+                Payload.INSTANCE_ID.getValue(), String.valueOf(from),
                 Payload.STATUS.getValue(), String.valueOf(ClientStatus.FAILED.getValue() )
         ));
 
@@ -65,7 +66,8 @@ public class ClientInstance extends Thread {
     }
 
     private void receiveInstanceIdFromClient() throws IOException {
-        while (true) {
+        int retries = 3;
+        while (retries != 0) {
             try {
                 String raw = this.in.readLine();
 
@@ -73,28 +75,27 @@ public class ClientInstance extends Thread {
                 String req = parsed.get(Payload.REQUEST.getValue());
                 String from = parsed.get(Payload.FROM.getValue());
 
-                if(req == null || !req.equals(PayloadValue.HANDSHAKE.getValue())) {
-                    this.rejectClientHandshakeRequest(Objects.requireNonNullElse(from, "anonymous"));
-                    throw new IOException("[!] - Invalid request from this anonymous client! Dropping request!");
-                }
-
-                if(from == null){
-                    this.rejectClientHandshakeRequest("anonymous");
-                    throw new IOException("[!] - Invalid request from this anonymous client! Dropping request!");
-                }
-
-                boolean isClientExists =  this.server.isClientExists(from);
-                if(isClientExists) {
+                if (req == null || !req.equals(PayloadValue.HANDSHAKE.getValue()) || from == null) {
                     this.rejectClientHandshakeRequest(from);
-                    throw new IOException("[!] - Client with this name already exists! Dropping request!");
+                    throw new IOException("Invalid request from this anonymous client! Dropping request!");
+                }
+
+                ClientInstance client = this.server.getClient(from);
+                if (client != null) {
+                    this.rejectClientHandshakeRequest(from);
+                    throw new IOException(String.format("Client with this name -  %s already exists! Dropping request!", from));
                 }
 
                 this.instanceId = from;
                 return;
             } catch (SocketTimeoutException e) {
+                retries--;
                 System.out.println("[!] - Timeout in handshake! Retrying...");
+            } catch (IOException e) {
+                System.out.printf("[!] - %s\n", e.getMessage());
             }
         }
+        System.out.println("[!] - Timeout in handshake! Aborting...");
     }
 
     private void handshake() {
@@ -110,33 +111,26 @@ public class ClientInstance extends Thread {
             this.clientSocket.setSoTimeout(0);
         }
         catch (IOException e){
-            System.out.println(e.getMessage());
+            System.out.printf("[!] - %s\n", e.getMessage());
         }
     }
 
-
-    public void closeInputBuffer() throws IOException {
-        this.in.close();
+    public void closeConnection() {
+        try{
+            this.out.close();
+            this.in.close();
+            this.server.deleteClientInstance(this.instanceId);
+        } catch (IOException e){
+            System.out.printf("[!] - %s\n", e.getMessage());
+        }
     }
 
-    public void closeOutputBuffer() {
-        this.out.close();
-    }
-
-    public void closeConnection() throws IOException {
-        this.out.close();
-        this.in.close();
-        this.clientSocket.close();
-        System.out.printf("[+] - Connection closed for client %s\n", this.instanceId);
-    }
-
-    public void sendMessage(String message, String to) {
+    public void sendMessage(String message, String to) throws IOException {
         ClientInstance receiver = this.server.getClient(to);
 
         if(this.counter >= 10) {
-            System.out.println("[+] - Maximum limit reached");
-            this.closeOutputBuffer();
-            return;
+            this.out.close();
+            throw new IOException("Maximum limit reached");
         }
 
         this.counter += 1;
@@ -161,18 +155,17 @@ public class ClientInstance extends Thread {
 
 
         if(request != null && from != null && to != null && message != null && status != null) {
-            throw new IOException(String.format("[!] - Invalid payload received from client %s!", from));
+            throw new IOException(String.format("Invalid payload received from client %s!", from));
         }
 
 
         if(request != null && from != null && to != null) {
             if(status != null) {
                 this.forwardMessageRequestConfirmation(from, to, status);
-                return;
             } else {
                 this.forwardMessageRequest(from, to);
-                return;
             }
+            return;
         }
 
         if(message != null && from != null && to != null) {
@@ -180,12 +173,10 @@ public class ClientInstance extends Thread {
             return;
         }
 
-        throw new IOException(String.format("[!] - Invalid payload received from client %s!", from));
+        throw new IOException(String.format("Invalid payload received from client %s!", from));
     }
 
     private void forwardMessageRequestConfirmation(String from, String to, String status){
-
-
         System.out.printf("[+] - Message request confirmation from %s to %s is %s\n", from, to, status);
 
         ClientInstance receiver = this.server.getClient(to);
@@ -231,18 +222,19 @@ public class ClientInstance extends Thread {
     public void run() {
         try {
             while (true) {
-
                 String raw = this.in.readLine();
                 if (raw == null) {
-                    break;
+                   throw new NullPointerException();
                 }
-                System.out.println(raw);
+
                 this.handleClientRawData(raw);
             }
 
         }
-        catch (SocketTimeoutException e){
-            System.out.println("[!] - Listening...");
+        catch (SocketTimeoutException e){}
+        catch (NullPointerException npe) {
+            System.out.printf("[!] - Connection closed with %s!\n", this.instanceId);
+            this.closeConnection();
         }
         catch (IOException e) {
             System.out.printf("[!] - %s\n", e.getMessage());
