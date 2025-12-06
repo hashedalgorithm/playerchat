@@ -3,6 +3,8 @@
 A simple multi-client chat application implemented in Java using sockets.  
 The project consists of a **server** that manages multiple client connections and **clients** that can send chat requests, confirm requests, and exchange messages.
 
+https://github.com/user-attachments/assets/423f23bc-a824-4ab4-909a-2ad5eb1a60cf
+
 ---
 ## Table of Contents
 
@@ -46,6 +48,9 @@ Clients can:
 
 - **MessageParser** (`MessageParser.java`):
     - Utility to serialize and parse message payloads between clients and server.
+    - 
+<img width="1023" height="1141" alt="Playerchat-360T-Architecture drawio" src="https://github.com/user-attachments/assets/6bbec23b-c22b-48fd-bea4-1c2537b59af0" />
+
 
 ---
 ## Setup
