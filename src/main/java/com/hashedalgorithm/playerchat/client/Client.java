@@ -17,7 +17,7 @@ import java.util.Map;
 import java.util.Scanner;
 
 public class Client extends Thread {
-    public static final int MAX_MESSAGES = 10;
+    public static final int MAX_MESSAGES = 3;
     public String instanceId;
     private Socket clientSocket;
     private String recipientInstanceId;
@@ -298,7 +298,7 @@ public class Client extends Thread {
     public void run() {
         System.out.println("[+] - Choose from menu");
         System.out.println("1. Send Chat Request\n2. Listen for Chat Request\n3. Exit");
-        int choice;
+        int choice = 0;
         try{
             while(true) {
                 if(this.recipientInstanceId == null){
@@ -338,7 +338,6 @@ public class Client extends Thread {
                         this.listener.start();
                     }
 
-//                    System.out.printf("%d, %d\n", this.counter, this.receivedMessageCounter);
                     if(this.counter >= MAX_MESSAGES && this.receivedMessageCounter >= MAX_MESSAGES) {
                         this.closeConnection();
                         System.out.println("[+] - Exiting...!");
