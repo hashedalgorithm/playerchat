@@ -16,13 +16,13 @@ import java.util.Map;
 
 
 public class ClientInstance extends Thread {
-    private final Socket clientSocket;
     public String instanceId;
+    private final Socket clientSocket;
     private final Server server;
     private final PrintWriter out;
     private final BufferedReader in;
     private int counter = 0;
-    MessageParser parser = new MessageParser();
+    private final MessageParser parser = new MessageParser();
 
     public ClientInstance(Server server, Socket clientSocket) throws IOException {
         this.clientSocket = clientSocket;
@@ -115,7 +115,7 @@ public class ClientInstance extends Thread {
         }
     }
 
-    public void closeConnection() {
+    private void closeConnection() {
         try{
             this.out.close();
             this.in.close();
@@ -125,7 +125,7 @@ public class ClientInstance extends Thread {
         }
     }
 
-    public void sendMessage(String message, String to) throws IOException {
+    private void sendMessage(String message, String to) throws IOException {
         ClientInstance receiver = this.server.getClient(to);
 
         if(this.counter >= 10) {
@@ -193,7 +193,7 @@ public class ClientInstance extends Thread {
         }
     }
 
-    public void forwardMessageRequest(String from, String to) {
+    private void forwardMessageRequest(String from, String to) {
         System.out.printf("[+] - Message request from %s to %s\n", from, to);
 
         ClientInstance receiver = this.server.getClient(to);
