@@ -23,11 +23,11 @@ public class Client extends Thread {
     private String recipientInstanceId;
     private PrintWriter out;
     private BufferedReader in;
-    private int counter = 0;
+    private int counter = 1;
     private final Scanner scanner = new Scanner(System.in);
     private final MessageParser parser = new MessageParser();
     private Thread listener;
-    private int receivedMessageCounter = 0;
+    private int receivedMessageCounter = 1;
 
     public Client(String ip, int port) {
         try{
@@ -238,7 +238,7 @@ public class Client extends Thread {
 
 
     public void listenForIncomingMessages() {
-        while (this.receivedMessageCounter < MAX_MESSAGES) {
+        while (this.receivedMessageCounter <= MAX_MESSAGES) {
             if(this.recipientInstanceId == null){
                 System.out.println("[!] - No recipient is connected!");
                 break;
@@ -267,7 +267,7 @@ public class Client extends Thread {
             return;
         }
 
-        if(this.counter >= MAX_MESSAGES){
+        if(this.counter > MAX_MESSAGES){
             System.out.println("[+] - Max limit reached! Now you can only receive messages!");
             return;
         }
@@ -289,8 +289,8 @@ public class Client extends Thread {
         System.out.print("\r\033[2K");
         // Replaces the whole line
         System.out.printf("[%s]: %s\n", from, message);
-        if(this.counter < MAX_MESSAGES){
-            System.out.printf("[%s]: ", this.instanceId);
+        if(this.counter <= MAX_MESSAGES){
+            System.out.printf("[%s]: {%d} - ", this.instanceId, this.counter);
         }
         this.receivedMessageCounter += 1;
     }
@@ -333,19 +333,19 @@ public class Client extends Thread {
                         default: System.out.println("[!] - Invalid request! Try again!");
                     }
                 } else {
-                    if(this.listener == null) {
-                        this.listener = new Thread(this::listenForIncomingMessages);
-                        this.listener.start();
-                    }
-
-                    if(this.counter >= MAX_MESSAGES && this.receivedMessageCounter >= MAX_MESSAGES) {
+                    if(this.counter > MAX_MESSAGES && this.receivedMessageCounter > MAX_MESSAGES) {
                         this.closeConnection();
                         System.out.println("[+] - Exiting...!");
                         System.exit(-1);
                     }
 
-                    if(this.counter < MAX_MESSAGES){
-                        System.out.printf("[%s]: {%d} - ", this.instanceId, this.counter + 1);
+                    if(this.listener == null) {
+                        this.listener = new Thread(this::listenForIncomingMessages);
+                        this.listener.start();
+                    }
+
+                    if(this.counter <= MAX_MESSAGES){
+                        System.out.printf("[%s]: {%d} - ", this.instanceId, this.counter);
                         this.sendMessage(scanner.nextLine());
                     }
 
