@@ -88,7 +88,11 @@ public class ClientInstance extends Thread {
 
                 this.instanceId = from;
                 return;
-            } catch (SocketTimeoutException e) {
+            } catch (NullPointerException e) {
+                System.err.println("[!] - Connection closed! Handshake failed!");
+                return;
+            }
+            catch (SocketTimeoutException e) {
                 retries--;
                 System.out.println("[!] - Timeout in handshake! Retrying...");
             } catch (IOException e) {
@@ -137,7 +141,7 @@ public class ClientInstance extends Thread {
 
         Map<String, String> result = new HashMap<>(Map.of(
                 Payload.FROM.getValue(), this.instanceId,
-                Payload.MESSAGE.getValue(), message
+                Payload.MESSAGE.getValue(), String.format("{%d} - %s", this.counter, message)
         ));
 
         String serializedMessage = this.parser.serialize(result);
@@ -231,7 +235,9 @@ public class ClientInstance extends Thread {
             }
 
         }
-        catch (SocketTimeoutException e){}
+        catch (SocketTimeoutException e){
+            // Do nothing and continue listening.
+        }
         catch (NullPointerException npe) {
             System.out.printf("[!] - Connection closed with %s!\n", this.instanceId);
             this.closeConnection();
