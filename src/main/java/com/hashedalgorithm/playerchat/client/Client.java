@@ -27,6 +27,7 @@ public class Client extends Thread {
     private final Scanner scanner = new Scanner(System.in);
     private final MessageParser parser = new MessageParser();
     private Thread listener;
+    private Thread inputListener;
     private int receivedMessageCounter = 1;
 
     public Client(String ip, int port) {
@@ -187,7 +188,7 @@ public class Client extends Thread {
         throw new IOException(String.format("Invalid payload received from client %s!", from));
     }
 
-    public void handleMessageRequest() throws IOException {
+    private void handleMessageRequest() throws IOException {
         int retries =  4;
         this.clientSocket.setSoTimeout(1000 * 60);
 
@@ -211,7 +212,7 @@ public class Client extends Thread {
 
                 if(status != null) {
                     if(status.equals(PayloadValue.SUCCESS.getValue())) {
-                        System.out.printf("[!] - Connected with %s!\n", from);
+                        System.out.printf("[+] - Connected with %s!\n", from);
                         this.recipientInstanceId = from;
                         return;
                     } else if(status.equals(PayloadValue.FAILED.getValue())) {
@@ -237,7 +238,7 @@ public class Client extends Thread {
     }
 
 
-    public void listenForIncomingMessages() {
+    private void listenForIncomingMessages() {
         while (this.receivedMessageCounter <= MAX_MESSAGES) {
             if(this.recipientInstanceId == null){
                 System.out.println("[!] - No recipient is connected!");
@@ -254,14 +255,21 @@ public class Client extends Thread {
                 return;
             }
             catch (SocketTimeoutException e) {
-                System.out.println("[!] - Socket timeout! Waiting for reply...");
+            //  Continue listening..
             } catch (IOException e) {
                 System.out.printf("[!] - %s\n", e.getMessage());
             }
         }
     }
 
-    public void sendMessage(String message) {
+    private void listenForMessageInputs() {
+        while (this.counter <= MAX_MESSAGES) {
+            System.out.printf("[%s]: {%d} - ", this.instanceId, this.counter);
+            this.sendMessage(scanner.nextLine());
+        }
+    }
+
+    private void sendMessage(String message) {
         if(this.recipientInstanceId == null){
             System.out.println("[+] - No Recipient is connected! Try again after starting a session\n");
             return;
@@ -299,57 +307,59 @@ public class Client extends Thread {
         System.out.println("[+] - Choose from menu");
         System.out.println("1. Send Chat Request\n2. Listen for Chat Request\n3. Exit");
         int choice = 0;
+        boolean exit = false;
         try{
-            while(true) {
-                if(this.recipientInstanceId == null){
-                    try{
-                        System.out.print("[+] Your choice: ");
-                        choice = Integer.parseInt(this.scanner.nextLine());
-                    } catch (NumberFormatException e){
-                        continue;
-                    }
-                    switch (choice) {
-                        case 1: {
-                            System.out.print("[+] - Enter player Id: ");
-                            String playerId = scanner.nextLine();
-                            this.sendMessageRequest(playerId);
-                            System.out.printf("[+] - Chat request to %s sent successfully!\n", playerId);
-                            System.out.println("[+] - Waiting for the recipient to accept request");
 
-                            this.handleMessageRequest();
-                            continue;
-                        }
-                        case 2: {
-                            System.out.println("[+] - Waiting for the recipient to accept request");
-                            this.handleMessageRequest();
-                            break;
-                        }
-                        case 3: {
-                            System.out.println("[+] - Exiting...");
-                            this.closeConnection();
-                            System.exit(-1);
-                            break;
-                        }
-                        default: System.out.println("[!] - Invalid request! Try again!");
-                    }
-                } else {
-                    if(this.counter > MAX_MESSAGES && this.receivedMessageCounter > MAX_MESSAGES) {
-                        this.closeConnection();
-                        System.out.println("[+] - Exiting...!");
-                        System.exit(-1);
-                    }
 
-                    if(this.listener == null) {
-                        this.listener = new Thread(this::listenForIncomingMessages);
-                        this.listener.start();
-                    }
-
-                    if(this.counter <= MAX_MESSAGES){
-                        System.out.printf("[%s]: {%d} - ", this.instanceId, this.counter);
-                        this.sendMessage(scanner.nextLine());
-                    }
-
+            while(exit == false){
+                try{
+                    System.out.print("[+] Your choice: ");
+                    choice = Integer.parseInt(this.scanner.nextLine());
+                } catch (NumberFormatException e){
+                    continue;
                 }
+                switch (choice) {
+                    case 1: {
+                        System.out.print("[+] - Enter player Id: ");
+                        String playerId = scanner.nextLine();
+                        this.sendMessageRequest(playerId);
+                        System.out.printf("[+] - Chat request to %s sent successfully!\n", playerId);
+                        System.out.println("[+] - Waiting for the recipient to accept request");
+
+                        this.handleMessageRequest();
+                        exit = true;
+                        break;
+                    }
+                    case 2: {
+                        System.out.println("[+] - Waiting for the recipient to accept request");
+                        this.handleMessageRequest();
+                        exit = true;
+                        break;
+                    }
+                    case 3: {
+                        System.out.println("[+] - Exiting...");
+                        this.closeConnection();
+                        System.exit(-1);
+                        break;
+                    }
+                    default: System.out.println("[!] - Invalid request! Try again!");
+                }
+            }
+
+            if(this.counter > MAX_MESSAGES && this.receivedMessageCounter > MAX_MESSAGES) {
+                this.closeConnection();
+                System.out.println("[+] - Exiting...!");
+                System.exit(-1);
+            }
+
+            if(this.listener == null) {
+                this.listener = new Thread(this::listenForIncomingMessages);
+                this.listener.start();
+            }
+
+            if(this.inputListener == null){
+                this.inputListener = new Thread(this::listenForMessageInputs);
+                this.inputListener.start();
             }
 
         } catch (IOException e){
