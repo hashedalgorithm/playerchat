@@ -305,13 +305,13 @@ public class Client extends Thread {
 
     public void run() {
         System.out.println("[+] - Choose from menu");
-        System.out.println("1. Send Chat Request\n2. Listen for Chat Request\n3. Exit");
+        System.out.println("\t1. Send Chat Request\n\t2. Listen for Chat Request\n\t3. Exit");
         int choice = 0;
         boolean exit = false;
         try{
 
 
-            while(exit == false){
+            while(!exit){
                 try{
                     System.out.print("[+] Your choice: ");
                     choice = Integer.parseInt(this.scanner.nextLine());
